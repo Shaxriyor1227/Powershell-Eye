@@ -1,0 +1,10 @@
+{
+    "operator_name": "Boss",
+    "biometric_id": "SHX-0821-ALPHA",
+    "retinal_dna_hash": "0x1B9070CDFE31",
+    "clearance_level": "LEVEL 5 // ROOT OPERATOR",
+    "first_registered": "2026-10-21 14:29:10",
+    "last_seen": "2026-10-22 12:12:08",
+    "sessions_count": 34,
+    "match_rate": 99.94
+}

@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CYBERNETIC BINARY EYE // OPTIC TERMINAL</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    body {
+      background-color: #000000;
+      color: #00ffff;
+      font-family: 'Courier New', Courier, monospace;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #canvas-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: radial-gradient(circle at center, #010d14 0%, #000000 70%);
+    }
+
+    canvas {
+      display: block;
+      background: #000000;
+      box-shadow: 0 0 50px rgba(0, 255, 255, 0.15);
+    }
+
+    /* CRT scanline overlay */
+    .scanlines {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.35) 50%),
+                  linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+      background-size: 100% 3px, 6px 100%;
+      z-index: 10;
+    }
+
+    /* Vignette & phosphor flicker */
+    .vignette {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      box-shadow: inset 0 0 120px rgba(0, 0, 0, 0.95);
+      z-index: 11;
+    }
+
+    /* Top & bottom HUD bars */
+    .hud-bar {
+      position: absolute;
+      left: 0;
+      width: 100%;
+      padding: 12px 24px;
+      font-size: 13px;
+      letter-spacing: 2px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: rgba(0, 255, 255, 0.7);
+      text-shadow: 0 0 8px rgba(0, 255, 255, 0.6);
+      z-index: 20;
+    }
+
+    .hud-top {
+      top: 0;
+      border-bottom: 1px solid rgba(0, 255, 255, 0.2);
+      background: linear-gradient(180deg, rgba(0, 20, 30, 0.7) 0%, transparent 100%);
+    }
+
+    .hud-bottom {
+      bottom: 0;
+      border-top: 1px solid rgba(0, 255, 255, 0.2);
+      background: linear-gradient(0deg, rgba(0, 20, 30, 0.7) 0%, transparent 100%);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border: 1px solid #00ffff;
+      border-radius: 3px;
+      background: rgba(0, 255, 255, 0.1);
+      margin-right: 8px;
+      font-weight: bold;
+      color: #ffffff;
+      text-shadow: 0 0 10px #00ffff;
+    }
+
+    .controls-hint {
+      display: flex;
+      gap: 16px;
+      font-size: 12px;
+    }
+
+    .key-btn {
+      color: #00ffff;
+      background: rgba(0, 255, 255, 0.15);
+      border: 1px solid rgba(0, 255, 255, 0.4);
+      padding: 2px 7px;
+      border-radius: 3px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .key-btn:hover {
+      background: rgba(0, 255, 255, 0.4);
+      color: #ffffff;
+      box-shadow: 0 0 10px #00ffff;
+    }
+
+    /* Reticle Corner Brackets */
+    .reticle {
+      position: absolute;
+      width: 48px;
+      height: 48px;
+      border-color: rgba(0, 255, 255, 0.4);
+      pointer-events: none;
+      z-index: 15;
+    }
+    .reticle-tl { top: 70px; left: 80px; border-top: 2px solid; border-left: 2px solid; }
+    .reticle-tr { top: 70px; right: 80px; border-top: 2px solid; border-right: 2px solid; }
+    .reticle-bl { bottom: 70px; left: 80px; border-bottom: 2px solid; border-left: 2px solid; }
+    .reticle-br { bottom: 70px; right: 80px; border-bottom: 2px solid; border-right: 2px solid; }
+  </style>
+</head>
+<body>
+  <div id="canvas-container">
+    <canvas id="eyeCanvas"></canvas>
+    
+    <div class="scanlines"></div>
+    <div class="vignette"></div>
+
+    <div class="reticle reticle-tl"></div>
+    <div class="reticle reticle-tr"></div>
+    <div class="reticle reticle-bl"></div>
+    <div class="reticle reticle-br"></div>
+
+    <div class="hud-bar hud-top">
+      <div>
+        <span class="badge">OPTIC_SYS // v5.2</span>
+        <span id="theme-display">THEME: NEON CYAN & TURQUOISE</span>
+      </div>
+      <div>
+        <span id="pupil-telemetry">PUPIL: 32%</span> |
+        <span id="gaze-telemetry">GAZE: [0.0, 0.0]</span> |
+        <span id="sync-telemetry">SYNC: 0x4F2A</span>
+      </div>
+    </div>
+
+    <div class="hud-bar hud-bottom">
+      <div class="controls-hint">
+        <span><button class="key-btn" id="btn-blink">[SPACE]</button> Blink</span>
+        <span><button class="key-btn" id="btn-sharingan">[S]</button> Sharingan</span>
+        <span><button class="key-btn" id="btn-hd">[H]</button> HD Pixels</span>
+        <span><button class="key-btn" id="btn-theme">[C]</button> Theme</span>
+        <span><button class="key-btn" id="btn-binary">[B]</button> Binary Only</span>
+        <span><button class="key-btn" id="btn-track">[T]</button> Mouse Track</span>
+        <span><button class="key-btn" id="btn-audio">[M]</button> Audio: OFF</span>
+      </div>
+      <div>
+        <span>FPS: <span id="fps-display">60</span></span> |
+        <span>TERMINAL: <span id="term-dims">100x36</span></span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // =========================================================================
+    // CYBERNETIC BINARY EYE - WEB TERMINAL ENGINE
+    // =========================================================================
+
+    const canvas = document.getElementById('eyeCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // UI Elements
+    const themeDisplay = document.getElementById('theme-display');
+    const pupilTelemetry = document.getElementById('pupil-telemetry');
+    const gazeTelemetry = document.getElementById('gaze-telemetry');
+    const syncTelemetry = document.getElementById('sync-telemetry');
+    const fpsDisplay = document.getElementById('fps-display');
+    const termDimsDisplay = document.getElementById('term-dims');
+    const btnAudio = document.getElementById('btn-audio');
+
+    // Color Palettes
+    const PALETTES = {
+      cyan: {
+        name: "NEON CYAN & TURQUOISE",
+        pupil_edge: "#00ffff",
+        iris_bright: "#4ef7ff",
+        iris_mid: "#00c3e3",
+        iris_deep: "#007a9c",
+        iris_crypt: "#003246",
+        limbal: "#001a28",
+        cornea_glint: "#ffffff",
+        sclera_bright: "#95b9cc",
+        sclera_dim: "#273a48",
+        vein: "#00e5ff",
+        lid_bright: "#ffffff",
+        lid_dim: "#7aa0b4",
+        lash: "#00f0ff",
+        glow: "rgba(0, 255, 255, 0.45)"
+      },
+      matrix: {
+        name: "MATRIX PHOSPHOR GREEN",
+        pupil_edge: "#39ff14",
+        iris_bright: "#00ff66",
+        iris_mid: "#00cc44",
+        iris_deep: "#007728",
+        iris_crypt: "#002b0e",
+        limbal: "#001707",
+        cornea_glint: "#ffffff",
+        sclera_bright: "#8dc99b",
+        sclera_dim: "#203a25",
+        vein: "#50ff78",
+        lid_bright: "#ffffff",
+        lid_dim: "#66a375",
+        lash: "#00ff66",
+        glow: "rgba(57, 255, 20, 0.45)"
+      },
+      crimson: {
+        name: "CYBERPUNK BLOOD AMBER",
+        pupil_edge: "#ff3333",
+        iris_bright: "#ff2244",
+        iris_mid: "#d41830",
+        iris_deep: "#870d1d",
+        iris_crypt: "#3d040c",
+        limbal: "#210206",
+        cornea_glint: "#ffffff",
+        sclera_bright: "#c49393",
+        sclera_dim: "#3e2424",
+        vein: "#ff5e5e",
+        lid_bright: "#ffffff",
+        lid_dim: "#a36666",
+        lash: "#ff3333",
+        glow: "rgba(255, 51, 51, 0.45)"
+      },
+      amethyst: {
+        name: "NEURAL VIOLET AMETHYST",
+        pupil_edge: "#d44aff",
+        iris_bright: "#b742ff",
+        iris_mid: "#8f22e0",
+        iris_deep: "#5b1294",
+        iris_crypt: "#2b0647",
+        limbal: "#180228",
+        cornea_glint: "#ffffff",
+        sclera_bright: "#b69ecc",
+        sclera_dim: "#362744",
+        vein: "#d86bff",
+        lid_bright: "#ffffff",
+        lid_dim: "#8e6dae",
+        lash: "#c94aff",
+        glow: "rgba(212, 74, 255, 0.45)"
+      }
+    };
+
+    const PALETTE_KEYS = Object.keys(PALETTES);
+    let currentPaletteIdx = 0;
+    let binaryOnly = false;
+    let mouseTracking = false;
+    let audioEnabled = false;
+
+    // Terminal Grid Dimensions
+    let COLS = 110;
+    let ROWS = 42;
+    let charWidth = 12;
+    let charHeight = 22;
+
+    // Resize canvas to match window
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      charWidth = canvas.width / COLS;
+      charHeight = canvas.height / ROWS;
+      termDimsDisplay.textContent = `${COLS}x${ROWS}`;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // Eye Engine State
+    const state = {
+      gazeX: 0.0,
+      gazeY: 0.0,
+      targetGazeX: 0.0,
+      targetGazeY: 0.0,
+      nextSaccade: 1.5,
+      blinkState: 0.0,
+      manualBlink: 0.0,
+      blinkInterval: 4.2,
+      blinkDuration: 0.26,
+      mousePos: { x: 0, y: 0 },
+      // Uchiha Sharingan
+      isSharingan: false,
+      sharinganAngle: 0.0,
+      sharinganSpinBoost: 0.0,
+      hdPixels: false
+    };
+
+    // Web Audio Synthesizer (Optic Cyber Sound)
+    let audioCtx = null;
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+    }
+
+    function playBlinkSound() {
+      if (!audioEnabled || !audioCtx) return;
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(220, audioCtx.currentTime + 0.18);
+        gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.18);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.18);
+      } catch (e) {}
+    }
+
+    function playSharinganSound() {
+      if (!audioEnabled || !audioCtx) return;
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(140, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(760, audioCtx.currentTime + 0.35);
+        gain.gain.setValueAtTime(0.09, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.45);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.45);
+      } catch (e) {}
+    }
+
+    // Eyelid curves (Human almond geometry)
+    function getEyelidCurves(u, hTop, hBot) {
+      if (Math.abs(u) >= 1.0) return { top: 0, bot: 0 };
+      const arch = Math.sqrt(Math.max(0, 1.0 - u * u));
+      // Asymmetric upper lid peak shifted toward medial (nose) side
+      const topAsym = 1.0 - 0.20 * u + 0.07 * (1.0 - u * u);
+      let yTop = -hTop * arch * topAsym;
+      
+      const botAsym = 0.92 + 0.14 * u;
+      let yBot = hBot * arch * botAsym;
+      
+      // Canthal tilt (+outer corner higher)
+      const tilt = -1.15 * u;
+      yTop += tilt;
+      yBot += tilt;
+      
+      return { top: yTop, bot: yBot };
+    }
+
+    // Pseudo-random hash
+    function hashNoise(x, y, seed = 0) {
+      const val = Math.sin(x * 12.9898 + y * 78.233 + seed * 37.719) * 43758.5453;
+      return val - Math.floor(val);
+    }
+
+    const matrixEdgeChars = ["/", "\\", "|", "[", "]", "{", "}", "<", ">", "=", "-", "1", "0", "#", "%", "X", "&"];
+    const scleraChars = ["0", "1", "·", ":", "+", "·", "1", "0", ";", "·"];
+
+    // Update mechanics
+    let lastTime = performance.now() / 1000;
+    let frameCount = 0;
+    let fpsTimer = lastTime;
+
+    function update(dt, time) {
+      // 0. Sharingan Chakra Spin Dynamics
+      if (state.isSharingan) {
+        if (state.sharinganSpinBoost > 0) {
+          state.sharinganSpinBoost = Math.max(0, state.sharinganSpinBoost - dt * 4.2);
+        }
+        state.sharinganAngle += dt * (1.15 + state.sharinganSpinBoost);
+      }
+
+      // 1. Gaze & Micro-saccades
+      if (mouseTracking) {
+        // Track mouse
+        const normMX = (state.mousePos.x - canvas.width / 2) / (canvas.width / 2);
+        const normMY = (state.mousePos.y - canvas.height / 2) / (canvas.height / 2);
+        state.targetGazeX = normMX * 4.0;
+        state.targetGazeY = normMY * 2.0;
+      } else {
+        // Natural micro-saccades
+        if (time >= state.nextSaccade) {
+          if (Math.random() < 0.6) {
+            state.targetGazeX = (Math.random() - 0.5) * 1.6;
+            state.targetGazeY = (Math.random() - 0.5) * 0.8;
+          } else {
+            state.targetGazeX = (Math.random() - 0.5) * 4.5;
+            state.targetGazeY = (Math.random() - 0.5) * 1.8;
+          }
+          state.nextSaccade = time + 2.0 + Math.random() * 2.2;
+        }
+      }
+
+      const smooth = Math.min(1.0, dt * 7.5);
+      state.gazeX += (state.targetGazeX - state.gazeX) * smooth;
+      state.gazeY += (state.targetGazeY - state.gazeY) * smooth;
+
+      // 2. Blinking mechanics
+      const prevBlink = state.blinkState;
+      if (state.manualBlink > 0) {
+        state.manualBlink -= dt;
+        const progress = 1.0 - (state.manualBlink / 0.28);
+        if (progress < 0.45) {
+          state.blinkState = progress / 0.45;
+        } else {
+          state.blinkState = 1.0 - ((progress - 0.45) / 0.55);
+        }
+      } else {
+        const tMod = time % state.blinkInterval;
+        const bDur = state.blinkDuration;
+        
+        if (tMod > (state.blinkInterval - bDur)) {
+          const tBlink = (tMod - (state.blinkInterval - bDur)) / bDur;
+          if (tBlink < 0.42) {
+            state.blinkState = Math.sin((tBlink / 0.42) * (Math.PI / 2.0));
+          } else if (tBlink < 0.56) {
+            state.blinkState = 1.0;
+          } else {
+            const openT = (tBlink - 0.56) / 0.44;
+            state.blinkState = 1.0 - Math.sin(openT * (Math.PI / 2.0));
+          }
+        } else {
+          // Double blink twitch
+          if (Math.floor(time / state.blinkInterval) % 3 === 0) {
+            const twitchDur = 0.36;
+            if (tMod < twitchDur) {
+              const tw = tMod / twitchDur;
+              state.blinkState = tw < 0.4 ? (tw / 0.4) : (1.0 - (tw - 0.4) / 0.6);
+            } else {
+              state.blinkState = 0.0;
+            }
+          } else {
+            state.blinkState = 0.0;
+          }
+        }
+      }
+      state.blinkState = Math.max(0.0, Math.min(1.0, state.blinkState));
+
+      // Trigger audio on blink start
+      if (prevBlink < 0.2 && state.blinkState >= 0.2) {
+        playBlinkSound();
+      }
+    }
+
+    // Render loop
+    function render(time) {
+      const pal = PALETTES[PALETTE_KEYS[currentPaletteIdx]];
+      
+      // Clear canvas with deep black
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.font = `bold ${Math.floor(charHeight * 0.85)}px 'Courier New', monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      // Dimensions
+      const cx = COLS / 2.0;
+      const cy = ROWS / 2.0;
+      const aspect = 2.05;
+
+      const wEye = COLS * 0.43;
+      const hTopOpen = ROWS * 0.38;
+      const hBotOpen = ROWS * 0.31;
+      const b = state.blinkState;
+
+      // Iris & pupil
+      const rIris = hTopOpen * aspect * (state.isSharingan ? 0.78 : 0.72);
+      const hippus = state.isSharingan ? 0.25 : (0.31 + 0.032 * Math.sin(time * 1.6) + 0.016 * Math.cos(time * 3.2));
+      const rPupil = rIris * hippus;
+
+      const irisCx = cx + state.gazeX;
+      const irisCy = cy + state.gazeY;
+
+      // Draw Monospace Characters Grid
+      for (let y = 0; y < ROWS; y++) {
+        const dy = y - cy;
+        const screenY = (y + 0.5) * charHeight;
+
+        for (let x = 0; x < COLS; x++) {
+          const dx = x - cx;
+          const u = dx / wEye;
+          const screenX = (x + 0.5) * charWidth;
+
+          if (Math.abs(u) >= 1.0) continue;
+
+          const curves = getEyelidCurves(u, hTopOpen, hBotOpen);
+          const yTopCurr = curves.top * (1.0 - b) + (curves.bot * 0.95) * b;
+          const yBotCurr = curves.bot * (1.0 - 0.12 * b);
+
+          const distToTop = dy - yTopCurr;
+          const distToBot = yBotCurr - dy;
+
+          // 1. Outside eyelids (Lashes / Orbit)
+          if (distToTop < 0) {
+            const gap = -distToTop;
+            if (gap <= 1.25 && b < 0.82) {
+              const lashCycle = (x + Math.floor(time * 2.5)) % 3;
+              if (lashCycle === 0) {
+                const char = u < 0 ? "/" : "\\";
+                ctx.fillStyle = pal.lash;
+                ctx.fillText(char, screenX, screenY);
+              } else if (lashCycle === 1) {
+                const char = Math.abs(u) < 0.22 ? "|" : (u < 0 ? "/" : "\\");
+                ctx.fillStyle = pal.lid_dim;
+                ctx.fillText(char, screenX, screenY);
+              }
+            } else if (gap <= 2.2) {
+              const hVal = hashNoise(x * 0.8, y * 0.9);
+              if (hVal > 0.80) {
+                ctx.fillStyle = pal.iris_crypt;
+                ctx.fillText(hVal > 0.90 ? "1" : "0", screenX, screenY);
+              }
+            }
+            continue;
+          }
+
+          if (distToBot < 0) {
+            const gap = -distToBot;
+            if (gap <= 1.0 && b < 0.82 && (x % 4 === 0) && hashNoise(x, y) > 0.45) {
+              ctx.fillStyle = pal.lid_dim;
+              ctx.fillText(".", screenX, screenY);
+            }
+            continue;
+          }
+
+          // 2. Eyelid margin: Sharp ASCII almond frame
+          const borderDist = Math.min(distToTop, distToBot);
+          if (borderDist < 0.88) {
+            const tokenIdx = Math.floor((x * 7 + y * 13) % matrixEdgeChars.length);
+            const char = binaryOnly ? (tokenIdx % 2 === 0 ? "1" : "0") : matrixEdgeChars[tokenIdx];
+            ctx.fillStyle = (tokenIdx % 3 !== 0) ? pal.lid_bright : pal.pupil_edge;
+            ctx.fillText(char, screenX, screenY);
+            continue;
+          }
+
+          // 3. Interior: Iris, Pupil, or Sclera
+          const idx = (x - irisCx);
+          const idy = (y - irisCy) * aspect;
+          const r = Math.sqrt(idx * idx + idy * idy);
+          const theta = Math.atan2(idy, idx);
+
+          if (r <= rIris) {
+            // A. PUPIL & IRIS
+            if (r <= rPupil) {
+              // Specular catchlight (10:30 o'clock)
+              const glintDx = idx + rPupil * 0.40;
+              const glintDy = idy + rPupil * 0.42;
+              const glintDist = Math.sqrt(glintDx * glintDx + glintDy * glintDy);
+
+              if (glintDist < rPupil * 0.38) {
+                // Corneal reflection
+                ctx.fillStyle = pal.cornea_glint;
+                ctx.shadowColor = pal.cornea_glint;
+                ctx.shadowBlur = 8;
+                ctx.fillText((x + y) % 2 === 0 ? "1" : "0", screenX, screenY);
+                ctx.shadowBlur = 0;
+              } else if (r >= rPupil * 0.88) {
+                // Sphincter ring
+                ctx.fillStyle = pal.pupil_edge;
+                ctx.shadowColor = pal.pupil_edge;
+                ctx.shadowBlur = 6;
+                ctx.fillText(hashNoise(x, y, 7) > 0.48 ? "1" : "0", screenX, screenY);
+                ctx.shadowBlur = 0;
+              }
+              continue;
+            }
+
+            // UCHIHA SHARINGAN (3-Tomoe + Orbital Ring + Glowing Red Matrix)
+            if (state.isSharingan) {
+              const span = rIris - rPupil;
+              const s = (r - rPupil) / span;
+              const rOrbit = rPupil + 0.50 * span;
+              const rHead = 0.21 * span;
+              const tailLen = 0.95;
+
+              let inTomoe = false;
+              for (let k = 0; k < 3; k++) {
+                const phi = state.sharinganAngle + k * (2.0 * Math.PI / 3.0);
+                const hx = rOrbit * Math.cos(phi);
+                const hy = rOrbit * Math.sin(phi);
+                const dh = Math.hypot(idx - hx, idy - hy);
+                if (dh <= rHead) {
+                  inTomoe = true;
+                  break;
+                }
+                const dth = ((theta - phi) % (2.0 * Math.PI) + 2.0 * Math.PI) % (2.0 * Math.PI);
+                if (dth <= tailLen) {
+                  const t = dth / tailLen;
+                  const rt = rOrbit - 0.18 * span * Math.pow(t, 1.3);
+                  const wt = rHead * Math.pow(1.0 - t, 0.85);
+                  if (Math.abs(r - rt) <= wt) {
+                    inTomoe = true;
+                    break;
+                  }
+                }
+              }
+
+              const inRing = Math.abs(r - rOrbit) <= (0.045 * span);
+              const ringTrack = Math.floor(s * 8.0);
+              const streamPos = theta * 6.5 + time * 3.2;
+              const binDigit = (Math.floor(streamPos) + ringTrack + x) % 2 === 0 ? "1" : "0";
+
+              if (inTomoe) {
+                // Tomoe: Jet-black background block with dark blood-ruby matrix digit
+                ctx.fillStyle = "#0c0204";
+                ctx.fillRect(screenX - charWidth * 0.5, screenY - charHeight * 0.5, charWidth, charHeight);
+                ctx.fillStyle = "#4a080e";
+                ctx.fillText(binDigit, screenX, screenY);
+              } else if (inRing) {
+                ctx.fillStyle = "#5c0812";
+                ctx.fillText(binDigit, screenX, screenY);
+              } else if (s > 0.88) {
+                ctx.fillStyle = "#1a0204";
+                ctx.fillText(binDigit, screenX, screenY);
+              } else {
+                const chakraPulse = 0.88 + 0.12 * Math.sin(time * 6.5 + theta * 3.0);
+                const rVal = Math.floor(Math.min(255, 250 * chakraPulse));
+                const gVal = Math.floor(22 * chakraPulse);
+                const bVal = Math.floor(32 * chakraPulse);
+                ctx.fillStyle = `rgb(${rVal}, ${gVal}, ${bVal})`;
+                ctx.shadowColor = "rgba(255, 20, 30, 0.6)";
+                ctx.shadowBlur = 6;
+                ctx.fillText(binDigit, screenX, screenY);
+                ctx.shadowBlur = 0;
+              }
+              continue;
+            }
+
+            // DIGITAL IRIS (Pure flowing binary digits)
+            const s = (r - rPupil) / (rIris - rPupil);
+            const furrows = Math.sin(s * 14.0 * Math.PI - time * 2.8);
+            const fibers = Math.cos(26.0 * theta + 1.8 * Math.sin(6.0 * theta) + time * 1.3);
+            const collarette = Math.max(0.0, 1.0 - Math.abs(s - 0.36) * 3.6);
+            let limbalFactor = s > 0.88 ? Math.max(0.12, 1.0 - (s - 0.88) / 0.12 * 0.88) : 1.0;
+
+            const ringTrack = Math.floor(s * 8.0);
+            const streamSpeed = ringTrack % 2 === 0 ? 3.6 : -3.0;
+            const streamPos = theta * 6.5 + time * streamSpeed;
+            const binDigit = (Math.floor(streamPos) + ringTrack + x) % 2 === 0 ? "1" : "0";
+
+            let intensity = (0.52 + 0.26 * fibers + 0.22 * furrows + 0.36 * collarette) * limbalFactor;
+            intensity = Math.max(0.0, Math.min(1.35, intensity));
+
+            let charColor = pal.iris_mid;
+            if (s > 0.90) {
+              charColor = pal.limbal;
+            } else if (s < 0.15) {
+              charColor = pal.pupil_edge;
+            } else if (s < 0.42) {
+              charColor = intensity > 0.8 ? pal.iris_bright : pal.iris_mid;
+            } else {
+              charColor = intensity < 0.46 ? pal.iris_crypt : pal.iris_deep;
+            }
+
+            if (intensity > 1.08 && s < 0.85) {
+              charColor = pal.cornea_glint;
+            }
+
+            ctx.fillStyle = charColor;
+            ctx.fillText(binDigit, screenX, screenY);
+
+          } else {
+            // B. SCLERA
+            const scleraDist = Math.sqrt(dx * dx + (dy * aspect) * (dy * aspect));
+            let sphericalShade = Math.max(0.2, 1.0 - (scleraDist / (wEye * 1.15)) * 0.62);
+            if (distToTop < 2.6) sphericalShade *= (0.42 + (distToTop / 2.6) * 0.58);
+
+            // Circuit capillaries
+            const vesselWave = Math.sin(dx * 0.42 + dy * 0.8) + Math.cos(dx * 0.24 - dy * 0.52);
+            const isVessel = (Math.abs(vesselWave) < 0.21) && (r > rIris * 1.08) && (Math.abs(u) > 0.32);
+
+            if (isVessel) {
+              ctx.fillStyle = pal.vein;
+              ctx.fillText(hashNoise(x, y, 19) > 0.48 ? "1" : "0", screenX, screenY);
+            } else {
+              const tokIdx = Math.floor((x * 3 + y * 7 + Math.floor(time * 0.5)) % scleraChars.length);
+              const char = binaryOnly ? (tokIdx % 2 === 0 ? "1" : "0") : scleraChars[tokIdx];
+
+              if (u < -0.82 && Math.abs(dy) < 1.8) {
+                ctx.fillStyle = "#af4b5f";
+              } else {
+                ctx.fillStyle = tokIdx < 3 ? pal.sclera_bright : pal.sclera_dim;
+              }
+              ctx.fillText(char, screenX, screenY);
+            }
+          }
+        }
+      }
+    }
+
+    // Animation loop
+    function loop(nowMs) {
+      const now = nowMs / 1000;
+      const dt = Math.min(0.1, now - lastTime);
+      lastTime = now;
+
+      update(dt, now);
+      render(now);
+
+      // FPS Counter
+      frameCount++;
+      if (now - fpsTimer >= 0.5) {
+        fpsDisplay.textContent = Math.round(frameCount / (now - fpsTimer));
+        frameCount = 0;
+        fpsTimer = now;
+
+        // Telemetry update
+        const hippus = Math.round((0.31 + 0.032 * Math.sin(now * 1.6)) * 100);
+        pupilTelemetry.textContent = `PUPIL: ${hippus}%`;
+        gazeTelemetry.textContent = `GAZE: [${state.gazeX.toFixed(1)}, ${state.gazeY.toFixed(1)}]`;
+        syncTelemetry.textContent = `SYNC: 0x${(Math.floor(now * 120) & 0xFFFF).toString(16).toUpperCase().padStart(4, '0')}`;
+      }
+
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+
+    // Mouse Tracking
+    window.addEventListener('mousemove', (e) => {
+      state.mousePos.x = e.clientX;
+      state.mousePos.y = e.clientY;
+    });
+
+    // Keyboard & Button Interactions
+    function triggerBlink() {
+      state.manualBlink = 0.28;
+    }
+
+    function cycleTheme() {
+      currentPaletteIdx = (currentPaletteIdx + 1) % PALETTE_KEYS.length;
+      themeDisplay.textContent = `THEME: ${PALETTES[PALETTE_KEYS[currentPaletteIdx]].name}`;
+    }
+
+    function toggleBinary() {
+      binaryOnly = !binaryOnly;
+    }
+
+    function toggleTracking() {
+      mouseTracking = !mouseTracking;
+    }
+
+    function toggleAudio() {
+      initAudio();
+      audioEnabled = !audioEnabled;
+      btnAudio.textContent = `[M] Audio: ${audioEnabled ? 'ON' : 'OFF'}`;
+    }
+
+    function toggleSharingan() {
+      initAudio();
+      state.isSharingan = !state.isSharingan;
+      if (state.isSharingan) {
+        state.sharinganSpinBoost = 7.5;
+        playSharinganSound();
+        themeDisplay.textContent = "MODE: UCHIHA SHARINGAN [3-TOMOE AWAKENED]";
+        themeDisplay.style.color = "#ff2233";
+      } else {
+        themeDisplay.textContent = `THEME: ${PALETTES[PALETTE_KEYS[currentPaletteIdx]].name}`;
+        themeDisplay.style.color = "";
+      }
+      const sBtn = document.getElementById('btn-sharingan');
+      if (sBtn) sBtn.style.color = state.isSharingan ? "#ff2233" : "";
+    }
+
+    function toggleHD() {
+      state.hdPixels = !state.hdPixels;
+      if (state.hdPixels) {
+        COLS = 150;
+        ROWS = 58;
+      } else {
+        COLS = 110;
+        ROWS = 42;
+      }
+      resize();
+      const hBtn = document.getElementById('btn-hd');
+      if (hBtn) {
+        hBtn.textContent = `[H] HD: ${state.hdPixels ? 'ON' : 'OFF'}`;
+        hBtn.style.color = state.hdPixels ? "#ffcc00" : "";
+      }
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        triggerBlink();
+      } else if (e.key.toLowerCase() === 's') {
+        toggleSharingan();
+      } else if (e.key.toLowerCase() === 'h') {
+        toggleHD();
+      } else if (e.key.toLowerCase() === 'c') {
+        cycleTheme();
+      } else if (e.key.toLowerCase() === 'b') {
+        toggleBinary();
+      } else if (e.key.toLowerCase() === 't') {
+        toggleTracking();
+      } else if (e.key.toLowerCase() === 'm') {
+        toggleAudio();
+      }
+    });
+
+    document.getElementById('btn-blink').addEventListener('click', triggerBlink);
+    document.getElementById('btn-sharingan').addEventListener('click', toggleSharingan);
+    document.getElementById('btn-hd').addEventListener('click', toggleHD);
+    document.getElementById('btn-theme').addEventListener('click', cycleTheme);
+    document.getElementById('btn-binary').addEventListener('click', toggleBinary);
+    document.getElementById('btn-track').addEventListener('click', toggleTracking);
+    btnAudio.addEventListener('click', toggleAudio);
+  </script>
+</body>
+</html>
